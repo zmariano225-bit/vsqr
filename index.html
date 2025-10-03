@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>QR</title>
+  <meta name="description" content="Generador de códigos QR con tarjetas elegantes">
+  
+  <!-- 🔗 Enlazar manifest y service worker -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <meta name="theme-color" content="#2b2520">
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Montserrat:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #2b2520;
+      color: #f8f4e9;
+      font-family: 'Montserrat', sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      padding: 15px 10px;
+    }
+    .frame {
+      width: 100%;
+      max-width: 400px;
+      background: #2b2520;
+      border: 1px solid #e0d6c9;
+      border-radius: 14px;
+      padding: 20px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+    }
+    header { text-align: center; margin-bottom: 18px; }
+    h1 {
+      font-family: 'Cinzel', serif;
+      font-weight: 700;
+      font-size: 2.6rem;
+      color: #d4af37;
+      letter-spacing: 1.2px;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    }
+    .form-group { margin-bottom: 14px; }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 600;
+      color: #e8dcca;
+      font-size: 13px;
+    }
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #d4af37;
+      border-radius: 8px;
+      background: white;
+      color: black;
+      font-size: 14px;
+      font-family: 'Montserrat', sans-serif;
+    }
+    input::placeholder { color: #777; }
+    .button-row {
+      display: flex;
+      gap: 8px;
+      margin: 14px 0 20px;
+    }
+    .button-row button {
+      flex: 1;
+      padding: 8px 4px;
+      border: none;
+      border-radius: 6px;
+      background: black;
+      color: white;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s ease;
+    }
+    .button-row button:hover { transform: translateY(-3px); }
+    .button-row button:active { transform: translateY(1px); }
+    #preview-qr { text-align: center; margin-bottom: 20px; }
+    #preview-qr canvas {
+      max-width: 120px;
+      border: 1px solid #5a5047;
+      border-radius: 6px;
+    }
+    .section-title {
+      color: #d4af37;
+      margin: 10px 0 12px;
+      font-size: 1.15rem;
+      font-weight: 600;
+    }
+    .saved-cards {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+    }
+    .card-item {
+      background: #342d27;
+      border: 1px solid #d4af37;
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .card-title {
+      font-weight: 600;
+      color: #e8dcca;
+      font-size: 13px;
+      margin-bottom: 5px;
+      word-break: break-word;
+    }
+    .card-url {
+      font-size: 11px;
+      color: #b8a99a;
+      margin: 4px 0;
+      word-break: break-all;
+    }
+    .card-qr { text-align: center; margin: 6px 0; }
+    .card-qr canvas { width: 80px; height: 80px; }
+    .card-actions {
+      display: flex;
+      gap: 5px;
+      margin-top: 8px;
+    }
+    .card-actions button {
+      flex: 1;
+      padding: 5px;
+      font-size: 10px;
+      border-radius: 5px;
+      background: black;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    .card-actions button:hover { background: #222; }
+    .empty-state {
+      text-align: center;
+      color: #a89c8f;
+      font-size: 13px;
+      padding: 16px;
+    }
+    #fileImport { display: none; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <header><h1>QR</h1></header>
+
+    <div class="form-group">
+      <label for="nombre">Nombre de referencia</label>
+      <input type="text" id="nombre" placeholder="Ej: Portfolio..." />
+    </div>
+    <div class="form-group">
+      <label for="url">URL o texto</label>
+      <input type="text" id="url" placeholder="https://ejemplo.com" />
+    </div>
+
+    <div class="button-row">
+      <button onclick="crearTarjeta()">Crear QR</button>
+      <button onclick="descargarQRPreview()">PNG</button>
+      <button onclick="document.getElementById('fileImport').click()">Importar</button>
+      <button onclick="exportarTarjetas()">Exportar</button>
+    </div>
+
+    <input type="file" id="fileImport" accept=".json" onchange="importarTarjetas(event)">
+    <div id="preview-qr"></div>
+
+    <div class="section-title">Tarjetas guardadas</div>
+    <div class="saved-cards" id="lista-tarjetas"></div>
+  </div>
+
+  <script>
+    const obtenerTarjetas = () => JSON.parse(localStorage.getItem('qrTarjetas') || '[]');
+    const guardarTarjetas = (t) => localStorage.setItem('qrTarjetas', JSON.stringify(t));
+
+    function crearTarjeta() {
+      const n = document.getElementById('nombre').value.trim();
+      const u = document.getElementById('url').value.trim();
+      if (!n || !u) return alert('Completa ambos campos.');
+      const tarjetas = obtenerTarjetas();
+      tarjetas.push({ id: Date.now().toString(), nombre: n, url: u });
+      guardarTarjetas(tarjetas);
+      document.getElementById('nombre').value = '';
+      document.getElementById('url').value = '';
+      document.getElementById('preview-qr').innerHTML = '';
+      cargarTarjetas();
+    }
+
+    function cargarTarjetas() {
+      const cont = document.getElementById('lista-tarjetas');
+      const tarjetas = obtenerTarjetas();
+      if (tarjetas.length === 0) {
+        cont.innerHTML = '<div class="empty-state">No hay tarjetas guardadas.</div>';
+        return;
+      }
+      cont.innerHTML = '';
+      tarjetas.forEach(t => {
+        const div = document.createElement('div');
+        div.className = 'card-item';
+        div.innerHTML = `
+          <div class="card-title">${t.nombre}</div>
+          <div class="card-url">${t.url}</div>
+          <div class="card-qr" id="qr-${t.id}"></div>
+          <div class="card-actions">
+            <button onclick="descargarQR('${t.id}', '${t.nombre}')">PNG</button>
+            <button onclick="copiarURL('${t.url}')">Copiar</button>
+            <button onclick="eliminarTarjeta('${t.id}')">✕</button>
+          </div>
+        `;
+        cont.appendChild(div);
+        new QRCode(document.getElementById(`qr-${t.id}`), { text: t.url, width: 80, height: 80 });
+      });
+    }
+
+    function descargarQR(id, nombre) {
+      const c = document.querySelector(`#qr-${id} canvas`);
+      if (c) {
+        const a = document.createElement('a');
+        a.download = `qr-${nombre.replace(/\s+/g, '_')}.png`;
+        a.href = c.toDataURL('image/png');
+        a.click();
+      }
+    }
+
+    function descargarQRPreview() {
+      const u = document.getElementById('url').value.trim();
+      if (!u) return alert('Ingresa una URL.');
+      const d = document.createElement('div');
+      document.body.appendChild(d);
+      new QRCode(d, { text: u, width: 300, height: 300 });
+      setTimeout(() => {
+        const c = d.querySelector('canvas');
+        const a = document.createElement('a');
+        a.download = 'qr.png';
+        a.href = c.toDataURL('image/png');
+        a.click();
+        document.body.removeChild(d);
+      }, 100);
+    }
+
+    const copiarURL = (u) => navigator.clipboard.writeText(u).then(() => alert('Copiado')).catch(() => alert('Error'));
+
+    // ✅ SIN CONFIRMACIÓN: se elimina directamente
+    function eliminarTarjeta(id) {
+      guardarTarjetas(obtenerTarjetas().filter(t => t.id !== id));
+      cargarTarjetas();
+    }
+
+    function exportarTarjetas() {
+      const t = obtenerTarjetas();
+      if (t.length === 0) return alert('No hay datos.');
+      const b = new Blob([JSON.stringify(t, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(b);
+      a.download = 'qr-tarjetas.json';
+      a.click();
+    }
+
+    function importarTarjetas(e) {
+      const f = e.target.files[0];
+      if (!f) return;
+      const r = new FileReader();
+      r.onload = (ev) => {
+        try {
+          const nuevas = JSON.parse(ev.target.result);
+          if (!Array.isArray(nuevas)) throw new Error();
+          const combinadas = [...obtenerTarjetas(), ...nuevas];
+          guardarTarjetas(combinadas);
+          cargarTarjetas();
+          alert('Importado con éxito.');
+        } catch {
+          alert('Archivo JSON inválido.');
+        }
+      };
+      r.readAsText(f);
+      e.target.value = '';
+    }
+
+    document.getElementById('url').addEventListener('input', () => {
+      const u = document.getElementById('url').value.trim();
+      const p = document.getElementById('preview-qr');
+      p.innerHTML = '';
+      if (u) {
+        const d = document.createElement('div');
+        p.appendChild(d);
+        new QRCode(d, { text: u, width: 120, height: 120 });
+      }
+    });
+
+    // Registrar service worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js');
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', cargarTarjetas);
+  </script>
+</body>
+</html>
