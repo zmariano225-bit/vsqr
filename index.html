@@ -292,11 +292,12 @@
     // Registrar service worker
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js');
+        navigator.serviceWorker.register('./sw.js');
       });
     }
 
     document.addEventListener('DOMContentLoaded', cargarTarjetas);
   </script>
 </body>
+
 </html>
